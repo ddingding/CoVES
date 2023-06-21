@@ -33,6 +33,16 @@ idx_to_aa = dict(zip(aa_to_idx.values(), aa_to_idx.keys()))
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
+# antitoxin specific constants
+list_wtaa_pos = ['L48', 'D52', 'I53', 'R55', 'L56', 'F74', 'R78', 'E80', 'A81', 'R82']
+wt_mut_aas_10p = ''.join([m[0] for m in list_wtaa_pos])
+
+# chain A antitoxin of PDB ID: 5CEG
+wt_chain_a = 'NVEKMSVAVTPQQAAVMREAVEAGEYATASEIVREAVRDWLAKRELRHDDIRRLRQLWDEGKASGRPEPVDFDALRKEARQKLTE'
+
+# chain C antitoxin of PDB ID: 5CEG
+wt_chain_c = 'ANVEKMSVAVTPQQAAVMREAVEAGEYATASEIVREAVRDWLAKRELRHDDIRRLRQLWDEGKASGRPEPVDFDALRKEARQKLT'
+
 
 ########################### one hot encoding functions ###########################
 def aa_to_oh(aa, dic_aa_to_oh_pos=aa_to_idx_stop):
@@ -47,11 +57,11 @@ def oh_to_aa(oh, dic_idx_to_aa=idx_to_aa_stop):
     return dic_idx_to_aa[pos]
 
 
-def seq_to_oh(aa_seq, d_aa_to_oh_pos):
+def seq_to_oh(aa_seq, dic_aa_to_oh_pos):
     # amino acid sequence to one hot encoding
     oh_all = np.array([])
     for aa in aa_seq:
-        oh = aa_to_oh(aa, d_aa_to_oh_pos)
+        oh = aa_to_oh(aa, dic_aa_to_oh_pos)
         oh_all = np.concatenate([oh_all, oh])
     return oh_all
 
@@ -126,17 +136,15 @@ def get_dic_p_to_list_muts(unique_single_muts):
 
 ########################### manipulating mutkeys (e.g. 'L48K:E59D')  ###########################
 
-
 def get_mut_seq_from_mutkey(mutkey):
     # get mutations from a mutkey 'L48K:E59D' --> 'KD'
     return "".join([m[-1] for m in mutkey.split(":")])
 
 
 def get_muts_from_mutkeys(mutkeys):
-    # get mutation sequence list for a list of mutkeys ['L48K:E59D'] --> ['KD']
+    # get mutation sequence list for a list of mutkeys ['L48K:E59D', 'L48K:E59A'] --> ['KD', 'KA']
     muts = [get_mut_seq_from_mutkey(mutkey) for mutkey in mutkeys]
     return muts
-
 
 def read_sampled_mut_key(fin):
     # just reads a
@@ -149,7 +157,6 @@ def read_sampled_mut_key(fin):
             print("""found '<' in file: """, fin)
     return muts
 
-
 def reindex_mut_str(mut_str, index_to_subtr):
     # subtract a number from each mutkey position
     list_new_mut_str = []
@@ -159,17 +166,39 @@ def reindex_mut_str(mut_str, index_to_subtr):
     return reidx_mut_str
 
 
-def make_mut_str_from_2_seqs(wt_seq, mut_seq):
+def make_mut_str_from_2_seqs(wt_seq, mut_seq, muts_only = False, offset=0):
     # expect wild-type sequence and mut seq where every non-mutated position is lower case
     list_muts = []
     for i, (wt_aa, mut_aa) in enumerate(zip(wt_seq, mut_seq)):
-        if mut_aa != "_":
-            mut = wt_aa + str(i) + mut_aa
+        p = i + offset
+        if mut_aa == "_": continue
+        # if only reporting mutated mutkeys
+        if muts_only:
+            if mut_aa != wt_aa:
+                mut = wt_aa + str(p) + mut_aa
+                list_muts.append(mut)
+            else: continue
+        # if reporting all mutated 
+        else : 
+            mut = wt_aa + str(p) + mut_aa
             list_muts.append(mut)
     return ":".join(list_muts)
+'''
+def get_mutkey_from_mutseq(mut_seq, wt_seq):
+    return ':'.join([wt_aa +str(i+1)+mut_aa for i,(wt_aa,mut_aa) in enumerate(zip(wt_seq, mut_seq)) if wt_aa!=mut_aa])
+'''
 
+def seq_with_valid_alphabet(seq, alphabet):
+    # takes a sequences and returns bool of whether all characters are seen in alphabet
+    # required to filter esm samples that have weird characters
+    #seq_with_valid_alphabet('ACD<', AA_ALPHABET_STOP)
+    all_valid = sum([s in alphabet for s in seq])
+    if all_valid == len(seq):
+        return True
+    else:
+        return False
 
-def make_mut_seq_from_mut_key_and_wt_seq(mut_key, wt_seq):
+def make_mut_seq_from_mut_key_and_wt_seq(mut_key, wt_seq, offset=0):
     # take a mut_keys and wild-type sequence, and return a sequence with the correct mutations in it
 
     muts = mut_key.split(":")
@@ -177,25 +206,19 @@ def make_mut_seq_from_mut_key_and_wt_seq(mut_key, wt_seq):
     list_seq = list(wt_seq)
     for m in muts:
         wt_aa = m[0]
-        aa_pos = int(m[1:-1])
+        aa_pos = int(m[1:-1]) +offset
         mut_aa = m[-1]
         try:
-            list_seq[aa_pos] = mut_aa
-            try:
-                assert wt_seq[aa_pos] == wt_aa  # check indexing correction went ok
-            except AssertionError:
-                print(aa_pos, wt_seq[aa_pos], wt_aa, m, muts)
-        except IndexError:
-            print(aa_pos, m)
+            assert wt_seq[aa_pos] == wt_aa  # check indexing correction went ok
+        except AssertionError:
+            print(aa_pos, wt_seq[aa_pos], wt_aa, m, muts)
+        list_seq[aa_pos] = mut_aa
 
     final_mut_seq = "".join(list_seq)
 
     assert hamming(final_mut_seq, wt_seq) == len(
         muts
     )  # check only desired mutations introduced
-    assert len(final_mut_seq) == len(
-        wt_seq
-    )  # check no error in making the full mutated sequence
 
     return final_mut_seq
 
@@ -210,6 +233,51 @@ def get_unique_single_muts(list_mutkeys):
     return unique_single_muts
 
 
+def get_muts_from_fl_sampled_seq(seq,
+                         m0_pos_to_extract, 
+                         wt_chain = wt_chain_c, 
+                        ):
+    # extracting the mutations from a sequence 
+    # chain is either 'C' or 'A'
+    if wt_chain[0] == 'A':
+        # chain C starts with 'A', and mutated position need 1 subtracted to get to M0 indexed wt seq 
+        offset = 1
+    elif wt_chain[0] == 'N':
+        #chain A starts with 'N', and mutated position need 2 subtracted to get to M0 indexed wt seq 
+        offset = 2
+    
+    wt0_pos = [m-offset for m in m0_pos_to_extract] # mANVE where A is indexed as 0
+    muts = [seq[p] for p in wt0_pos]
+    
+    # sanity check that extracting the right position
+    if len(m0_pos_to_extract) == 10:
+        muts_wt = [wt_chain[p] for p in wt0_pos]
+        assert muts_wt == list(wt_mut_aas_10p)
+    return muts
+'''
+def get_muts_from_chc_seq(seq,m0_pos_to_extract, 
+                          wt_chain_c = wt_chain_c):
+    # extracting the mutations from a sequence 
+    a0_pos = [m-1 for m in m0_pos_to_extract] # mANVE where A is indexed as 0
+    muts = [seq[p] for p in a0_pos]
+    
+    # sanity check that if extracting the right position
+    if len(m0_pos_to_extract) == 10:
+        muts_wt = [wt_chain_c[p] for p in a0_pos]
+        assert muts_wt == ['L', 'D', 'I', 'R', 'L', 'F', 'R', 'E', 'A', 'R']
+    return muts
+
+def get_muts_from_cha_seq(seq,m0_pos_to_extract, 
+                          wt_chain_a = wt_chain_a):
+    n0_pos = [m-2 for m in m0_pos_to_extract] # maNVE where N is indexed as 0
+    muts = [seq[p] for p in n0_pos]
+    
+    # sanity check that if extracting the right position
+    if len(m0_pos_to_extract) == 10:
+        muts_wt = [wt_chain_a[p] for p in n0_pos]
+        assert muts_wt == ['L', 'D', 'I', 'R', 'L', 'F', 'R', 'E', 'A', 'R']
+    return muts
+'''
 ############################################
 def hamming(str1, str2):
     assert len(str1) == len(str2)
@@ -232,7 +300,7 @@ def get_pairwise_hammings(muts, ref_seq=None):
 def fasta_iter_py3(fasta_name):
     """
 	given a fasta file,  yield tuples of header, sequence
-	https://github.com/GuyAllard/fasta_iterator/blob/master/fasta_iterator/__init__.py
+	from https://github.com/GuyAllard/fasta_iterator/blob/master/fasta_iterator/__init__.py
     """
     rec = None
     for line in open(fasta_name, "r"):
@@ -508,12 +576,10 @@ def get_subset_data(x,y, subset=0.9):
 """
 
 
-def fit_plot_train_test(
+def fit_train_test(
     df_train,
     df_test,
     fit_val="fitness",
-    xlim=None,
-    ylim=None,
     lr=0.005,
     epochs=200,
     batch_size=1000,
@@ -584,7 +650,7 @@ def run_subsampling(
             df_train, df_test = get_df_train_test(
                 df_dms, train_frac=fraction_test, rand_seed=i
             )
-            df_train, df_test, model_subset = fit_plot_train_test(
+            df_train, df_test, model_subset = fit_train_test(
                 df_train,
                 df_test,
                 fit_val=fit_val,
@@ -727,7 +793,7 @@ def plot_corr_marginal(
 
 
 def plot_roc(
-    df_yhats_y, fname="ROC_10p", n_thresh=20, true_thresh=0.5, fig_size=(1.5, 1.5)
+    df_yhats_y, fname="ROC_10p", n_thresh=20, true_thresh=0.5, fig_size=(1.5, 1.5),
 ):
     # takes a df with columns 'yobs' and 'yhat_non' and plots a ROC curve for the given true threshold
 
@@ -768,3 +834,33 @@ def plot_roc(
 
     roc_auc = 1 + np.trapz(list_fpr, list_tpr)
     print("AUC", roc_auc)
+
+def get_ppv(df_yhats_y, threshold):
+    df_pred_positives = df_yhats_y.loc[df_yhats_y.yhat_non>threshold]
+    df_true_positives = df_pred_positives.loc[df_pred_positives.yobs > threshold]
+
+    ppv = len(df_true_positives)/ len(df_pred_positives)
+    print(f'PPV is{ppv}')
+    return ppv
+    
+    
+####### antitoxin 10 position generated sequence evalution ######
+def calc_at_sample_stats(list_mutseqs, model, threshold):
+    # calculates the prediction fraction alive, pairwise hamming and wt distance
+
+    # convert to one hot to feed to model
+    list_oh_sample = [seq_to_oh(s, aa_to_idx) for s in list_mutseqs]
+    x_sampled = np.stack(list_oh_sample, axis=0)
+    x_sampled= np.c_[x_sampled,np.ones(x_sampled.shape[0])] 
+    yhat = model.predict(x_sampled) # getting model predictions
+
+    # calculate statistics
+    frac_alive = np.sum([f>threshold for f in yhat])/len(yhat)
+
+    pw_hamming = get_pairwise_hammings(list_mutseqs)
+    mean_pw_hamming = np.mean(pw_hamming)
+
+    wt_hamming = get_pairwise_hammings(list_mutseqs, ref_seq = wt_mut_aas_10p)
+    mean_wt_hamming = np.mean(wt_hamming)
+
+    return frac_alive, mean_pw_hamming, mean_wt_hamming
