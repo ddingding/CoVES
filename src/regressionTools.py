@@ -39,7 +39,6 @@ wt_mut_aas_10p = ''.join([m[0] for m in list_wtaa_pos])
 
 # chain A antitoxin of PDB ID: 5CEG
 wt_chain_a = 'NVEKMSVAVTPQQAAVMREAVEAGEYATASEIVREAVRDWLAKRELRHDDIRRLRQLWDEGKASGRPEPVDFDALRKEARQKLTE'
-
 # chain C antitoxin of PDB ID: 5CEG
 wt_chain_c = 'ANVEKMSVAVTPQQAAVMREAVEAGEYATASEIVREAVRDWLAKRELRHDDIRRLRQLWDEGKASGRPEPVDFDALRKEARQKLT'
 
@@ -254,35 +253,15 @@ def get_muts_from_fl_sampled_seq(seq,
         muts_wt = [wt_chain[p] for p in wt0_pos]
         assert muts_wt == list(wt_mut_aas_10p)
     return muts
-'''
-def get_muts_from_chc_seq(seq,m0_pos_to_extract, 
-                          wt_chain_c = wt_chain_c):
-    # extracting the mutations from a sequence 
-    a0_pos = [m-1 for m in m0_pos_to_extract] # mANVE where A is indexed as 0
-    muts = [seq[p] for p in a0_pos]
-    
-    # sanity check that if extracting the right position
-    if len(m0_pos_to_extract) == 10:
-        muts_wt = [wt_chain_c[p] for p in a0_pos]
-        assert muts_wt == ['L', 'D', 'I', 'R', 'L', 'F', 'R', 'E', 'A', 'R']
-    return muts
 
-def get_muts_from_cha_seq(seq,m0_pos_to_extract, 
-                          wt_chain_a = wt_chain_a):
-    n0_pos = [m-2 for m in m0_pos_to_extract] # maNVE where N is indexed as 0
-    muts = [seq[p] for p in n0_pos]
-    
-    # sanity check that if extracting the right position
-    if len(m0_pos_to_extract) == 10:
-        muts_wt = [wt_chain_a[p] for p in n0_pos]
-        assert muts_wt == ['L', 'D', 'I', 'R', 'L', 'F', 'R', 'E', 'A', 'R']
-    return muts
-'''
 ############################################
 def hamming(str1, str2):
     assert len(str1) == len(str2)
     return sum(c1 != c2 for c1, c2 in zip(str1, str2))
 
+def complement(inbase):
+    cDic = {"A": "T", "T": "A", "C": "G", "G": "C"}
+    return cDic[inbase]
 
 def get_pairwise_hammings(muts, ref_seq=None):
     # take a list of mutations as string, like ['ACADK', 'ACADD']
@@ -553,28 +532,6 @@ def get_df_train_test(df_data, train_frac=0.9, rand_seed=3):
     print(df_data_test.shape)
 
     return df_data_train, df_data_test
-
-
-"""
-def get_subset_data(x,y, subset=0.9):
-    # taking a n x feature array of X, and target values Y
-    # and splitting it randomly into training X and test X,
-
-    n = x.shape[0]
-    train_n = int(n*subset)
-    test_n = n - train_n
-    train_rand_idx = random.sample(list(range(n)), train_n)
-    test_rand_idx = [i for i in list(range(n)) if i not in train_rand_idx]
-
-    x_train = x[train_rand_idx,:]
-    x_test = x[test_rand_idx,:]
-
-    y_train = y[train_rand_idx]
-    y_test = y[test_rand_idx]
-    # taking 2
-    return x_train, y_train, x_test, y_test
-"""
-
 
 def fit_train_test(
     df_train,
