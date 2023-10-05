@@ -1,5 +1,7 @@
 # CoVES
-Structure-based scoring and sampling of 'Combinatorial Variant Effects from Structure' (CoVES)
+Structure-based scoring and sampling of 'Combinatorial Variant Effects from Structure' (CoVES) 
+
+For the accompanying paper see: https://www.biorxiv.org/content/10.1101/2022.10.31.514613v2
 
 ## Folder structure
 The respective folders contain examples of how to run the code.
