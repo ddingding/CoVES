@@ -288,7 +288,11 @@ def get_gvp_res_prefs(wt_seq='',
     model = get_model('RES').to(device)
 
     #load model
-    model.load_state_dict(torch.load(model_weight_path))
+    if device == 'cuda':
+        model.load_state_dict(torch.load(model_weight_path))
+    else:
+        model.load_state_dict(torch.load(model_weight_path, map_location=torch.device('cpu')))
+
     model = model.eval()
     
     ds_all = myRESDataset(lmdb_dout, chain_id_oi=chain_number)
@@ -298,7 +302,8 @@ def get_gvp_res_prefs(wt_seq='',
     df_result = pd.DataFrame()
     with torch.no_grad():
         c=0
-        for num, aa, b in dl_all:
+        for d in tqdm.tqdm(dl_all):
+            num, aa, b = d
             if c<max_pos_to_do:
                 pos = num.numpy()[0]
                 aa3 = num_to_aa3[aa.numpy()[0]]
@@ -324,6 +329,6 @@ def get_gvp_res_prefs(wt_seq='',
                 c+=1
                 print(c)
     df_result = df_result.reset_index()
-    print(df_result)
+    #print(df_result)
     df_result.to_csv(dout+'gvp_{}_m_{}_230523_.csv'.format(n_ave, protein_name))
     return df_result
